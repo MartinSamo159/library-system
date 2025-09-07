@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Výpůjčky - Library System</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          background: #f4f6f9;
+          margin: 0;
+          padding: 20px;
+        }
+        header {
+          background: #007bff;
+          color: white;
+          padding: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        header nav a, header nav button {
+          color: white;
+          margin-left: 15px;
+          text-decoration: none;
+          font-weight: bold;
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1em;
+        }
+        header nav button:hover, header nav a:hover {
+          text-decoration: underline;
+        }
+        .hidden { display: none; }
+        .section {
+          margin: 20px 0;
+          padding: 15px;
+          background: white;
+          border-radius: 5px;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background: #f2f2f2;
+        }
+        button {
+          padding: 6px 12px;
+          margin: 3px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+    </style>
+</head>
+<body>
+<header>
+    <h2>📚 Library System</h2>
+    <nav>
+        <a href="books.html">Knihy</a>
+        <a href="loans.html" id="loans-link">Výpůjčky</a>
+        <a href="users.html" id="users-link" class="hidden">Uživatelé</a>
+        <button onclick="logout()">Odhlásit se</button>
+    </nav>
+</header>
+
+<h2>Výpůjčky</h2>
+
+<!-- Formulář pro půjčování (jen ADMIN/LIBRARIAN) -->
+<div class="section" id="loanForm" style="display:none;">
+    <h3>Nová výpůjčka</h3>
+    <label>Uživatel:</label>
+    <select id="userSelect"></select>
+    <label>Kniha:</label>
+    <select id="bookSelect"></select>
+    <button class="btn-success" onclick="createLoan()">Půjčit</button>
+</div>
+
+<!-- Tabulka všech výpůjček -->
+<div class="section">
+    <h3>Seznam výpůjček</h3>
+    <table id="loans-table">
+        <thead>
+        <tr>
+            <th>ID</th><th>Uživatel</th><th>Kniha</th>
+            <th>Datum výpůjčky</th><th>Datum vrácení</th><th>Akce</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+    // --- Přihlášení ---
+    const username = localStorage.getItem("username");
+    const password = localStorage.getItem("password");
+    if (!username || !password) {
+      window.location.href = "login.html";
+    }
+    const authHeader = "Basic " + btoa(username + ":" + password);
+
+    function logout() {
+      localStorage.removeItem("username");
+      localStorage.removeItem("password");
+      window.location.href = "login.html";
+    }
+
+    // --- Načti výpůjčky ---
+    function loadLoans() {
+      fetch("/loans", { headers: { "Authorization": authHeader } })
+        .then(res => res.json())
+        .then(loans => {
+          const tbody = document.querySelector("#loans-table tbody");
+          tbody.innerHTML = "";
+          loans.forEach(loan => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${loan.id}</td>
+              <td>${loan.user.name}</td>
+              <td>${loan.book.title}</td>
+              <td>${loan.loanDate}</td>
+              <td>${loan.returnDate || ""}</td>
+              <td>
+                ${!loan.returnDate ? `<button class="btn-danger" onclick="returnLoan(${loan.id})">Vrátit</button>` : ""}
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        });
+    }
+
+    // --- Vrácení knihy ---
+    function returnLoan(loanId) {
+      fetch("/loans/" + loanId + "/return", {
+        method: "PUT",
+        headers: { "Authorization": authHeader }
+      })
+      .then(res => {
+        if (res.ok) {
+          alert("✅ Kniha vrácena");
+          loadLoans();
+        } else {
+          res.text().then(msg => alert("❌ Chyba: " + msg));
+        }
+      });
+    }
+
+    // --- Načti uživatele do selectu ---
+    function loadUsers() {
+      fetch("/users", { headers: { "Authorization": authHeader } })
+        .then(res => res.json())
+        .then(users => {
+          const select = document.getElementById("userSelect");
+          select.innerHTML = "";
+          users.forEach(u => {
+            const opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = `${u.name} (${u.email})`;
+            select.appendChild(opt);
+          });
+        });
+    }
+
+    // --- Načti knihy do selectu ---
+    function loadBooks() {
+      fetch("/books?page=0&size=50", { headers: { "Authorization": authHeader } })
+        .then(res => res.json())
+        .then(data => {
+          const books = data.content || data;
+          const select = document.getElementById("bookSelect");
+          select.innerHTML = "";
+          books.forEach(b => {
+            const opt = document.createElement("option");
+            opt.value = b.id;
+            opt.textContent = `${b.title} – ${b.author}`;
+            select.appendChild(opt);
+          });
+        });
+    }
+
+    // --- Vytvoř výpůjčku ---
+    function createLoan() {
+      const userId = document.getElementById("userSelect").value;
+      const bookId = document.getElementById("bookSelect").value;
+
+      fetch(`/loans?userId=${userId}&bookId=${bookId}`, {
+        method: "POST",
+        headers: { "Authorization": authHeader }
+      })
+      .then(res => {
+        if (res.ok) {
+          alert("✅ Výpůjčka vytvořena");
+          loadLoans();
+        } else {
+          res.text().then(msg => alert("❌ Chyba: " + msg));
+        }
+      });
+    }
+
+    // --- Inicializace stránky podle role ---
+    fetch("/me", { headers: { "Authorization": authHeader } })
+      .then(res => res.json())
+      .then(user => {
+        console.log("Přihlášený uživatel:", user);
+
+        // půjčování – pro LIBRARIAN a ADMIN
+        if (user.role === "ROLE_LIBRARIAN" || user.role === "ROLE_ADMIN") {
+          document.getElementById("loanForm").style.display = "block";
+          loadUsers();
+          loadBooks();
+        }
+
+        // link na Users – jen pro ADMIN
+        if (user.role === "ROLE_ADMIN") {
+          document.getElementById("users-link").classList.remove("hidden");
+        }
+
+        loadLoans();
+      })
+      .catch(() => {
+        alert("❌ Chyba při načítání uživatele");
+        window.location.href = "login.html";
+      });
+</script>
+</body>
+</html>

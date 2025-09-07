@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Library System</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          background-color: #f4f6f9;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+        }
+
+        .login-box {
+          background: white;
+          padding: 30px;
+          border-radius: 10px;
+          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+          width: 300px;
+          text-align: center;
+        }
+
+        .login-box h1 {
+          margin-bottom: 20px;
+          font-size: 22px;
+          color: #333;
+        }
+
+        .login-box input {
+          width: 100%;
+          padding: 10px;
+          margin: 8px 0;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+        }
+
+        .login-box button {
+          width: 100%;
+          padding: 10px;
+          margin-top: 15px;
+          background-color: #007bff;
+          border: none;
+          color: white;
+          font-weight: bold;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: background 0.3s;
+        }
+
+        .login-box button:hover {
+          background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+<div class="login-box">
+    <h1>📚 Library Login</h1>
+    <form id="login-form">
+        <input type="text" id="username" placeholder="Uživatelské jméno" required>
+        <input type="password" id="password" placeholder="Heslo" required>
+        <button type="submit">Přihlásit</button>
+    </form>
+</div>
+
+<script>
+    document.getElementById("login-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
+      // Testneme přihlášení na /books
+      fetch("/books", {
+        headers: {
+          "Authorization": "Basic " + btoa(username + ":" + password)
+        }
+      })
+      .then(res => {
+        if (res.ok) {
+          // ✅ přihlášení úspěšné
+          localStorage.setItem("username", username);
+          localStorage.setItem("password", password);
+          window.location.href = "books.html"; // přesměrujeme
+        } else if (res.status === 401) {
+          alert("❌ Neplatné uživatelské jméno nebo heslo");
+        } else {
+          alert("⚠️ Chyba serveru: " + res.status);
+        }
+      })
+      .catch(() => {
+        alert("⚠️ Nelze se připojit k serveru.");
+      });
+    });
+</script>
+
+</body>
+</html>

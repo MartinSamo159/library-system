@@ -1,0 +1,27 @@
+# Build files
+/target/
+
+# Maven wrapper
+/.mvn/
+!/.mvn/wrapper/maven-wrapper.properties
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+
+# Database dumps
+*.db
+*.sql

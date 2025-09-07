@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Knihy - Library System</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          background: #f4f6f9;
+          margin: 0;
+          padding: 20px;
+        }
+        header {
+          background: #007bff;
+          color: white;
+          padding: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        header nav a, header nav button {
+          color: white;
+          margin-left: 15px;
+          text-decoration: none;
+          font-weight: bold;
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1em;
+        }
+        header nav button:hover, header nav a:hover {
+          text-decoration: underline;
+        }
+        .hidden { display: none; }
+        .section {
+          margin: 20px 0;
+          padding: 15px;
+          background: white;
+          border-radius: 5px;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background: #f2f2f2;
+        }
+        button {
+          padding: 6px 12px;
+          margin: 3px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-primary { background: #007bff; color: white; }
+    </style>
+</head>
+<body>
+<header>
+    <h2>📚 Library System</h2>
+    <nav>
+        <a href="books.html">Knihy</a>
+        <a href="loans.html" id="loans-link">Výpůjčky</a>
+        <a href="users.html" id="users-link" class="hidden">Uživatelé</a>
+        <button onclick="logout()">Odhlásit se</button>
+    </nav>
+</header>
+
+<!-- 🔍 Vyhledávání -->
+<div class="section">
+    <h3>Vyhledávání knih</h3>
+    <input type="text" id="search-title" placeholder="Název">
+    <input type="text" id="search-author" placeholder="Autor">
+    <input type="text" id="search-genre" placeholder="Žánr">
+    <input type="text" id="search-isbn" placeholder="ISBN">
+    <button onclick="searchBooks()">Hledat</button>
+    <button onclick="resetSearch()">Reset</button>
+</div>
+
+<!-- 📚 Seznam knih -->
+<div class="section">
+    <h3>Seznam knih</h3>
+    <table id="books-table">
+        <thead>
+        <tr>
+            <th>ID</th><th>Název</th><th>Autor</th><th>Rok</th><th>ISBN</th><th>Žánr</th><th>Stran</th><th>Akce</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <div id="pagination"></div>
+</div>
+
+<!-- ➕ Přidání knihy -->
+<div id="add-book-section" class="section hidden">
+    <h3>Přidat knihu</h3>
+    <form id="add-book-form">
+        <input type="text" id="title" placeholder="Název" required>
+        <input type="text" id="author" placeholder="Autor" required>
+        <input type="number" id="year" placeholder="Rok vydání" required>
+        <input type="text" id="isbn" placeholder="ISBN" required>
+        <input type="text" id="genre" placeholder="Žánr">
+        <input type="number" id="pages" placeholder="Počet stran">
+        <button type="submit" class="btn-primary">Přidat</button>
+    </form>
+</div>
+
+<script>
+    const username = localStorage.getItem("username");
+    const password = localStorage.getItem("password");
+    const authHeader = "Basic " + btoa(username + ":" + password);
+
+    let currentPage = 0;
+    let lastSearch = {};
+
+    function logout() {
+      localStorage.removeItem("username");
+      localStorage.removeItem("password");
+      window.location.href = "login.html";
+    }
+
+    // 🔑 Načtení role uživatele
+    fetch("/me", { headers: { "Authorization": authHeader } })
+      .then(res => {
+        if (!res.ok) throw new Error("Chyba při ověřování uživatele");
+        return res.json();
+      })
+      .then(user => {
+        if (user.role === "ROLE_LIBRARIAN" || user.role === "ROLE_ADMIN") {
+          document.getElementById("add-book-section").classList.remove("hidden");
+        }
+        if (user.role === "ROLE_ADMIN") {
+          document.getElementById("users-link").classList.remove("hidden");
+        }
+        loadBooks();
+      })
+      .catch(err => {
+        alert("❌ Přihlášení selhalo: " + err.message);
+        window.location.href = "login.html";
+      });
+
+    // 📚 Načtení knih se stránkováním a filtry
+    function loadBooks() {
+      let query = `/books?page=${currentPage}&size=10`;
+      for (const key in lastSearch) {
+        if (lastSearch[key]) {
+          query += `&${key}=` + encodeURIComponent(lastSearch[key]);
+        }
+      }
+
+      fetch(query, { headers: { "Authorization": authHeader } })
+        .then(res => res.json())
+        .then(data => {
+          const books = data.content || [];
+          const tbody = document.querySelector("#books-table tbody");
+          tbody.innerHTML = "";
+          books.forEach(book => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${book.id}</td>
+              <td>${book.title}</td>
+              <td>${book.author}</td>
+              <td>${book.publicationYear}</td>
+              <td>${book.isbn}</td>
+              <td>${book.genre || ""}</td>
+              <td>${book.pages || ""}</td>
+              <td>
+                <button class="btn-danger" onclick="deleteBook(${book.id})">Smazat</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          // stránkování
+          const pagination = document.getElementById("pagination");
+          pagination.innerHTML = `
+            <button onclick="prevPage()" ${data.first ? "disabled" : ""}>Předchozí</button>
+            <span>Stránka ${data.number + 1} z ${data.totalPages}</span>
+            <button onclick="nextPage()" ${data.last ? "disabled" : ""}>Další</button>
+          `;
+        });
+    }
+
+    // 🔍 Vyhledávání
+    function searchBooks() {
+      lastSearch = {
+        title: document.getElementById("search-title").value,
+        author: document.getElementById("search-author").value,
+        genre: document.getElementById("search-genre").value,
+        isbn: document.getElementById("search-isbn").value
+      };
+      currentPage = 0;
+      loadBooks();
+    }
+
+    function resetSearch() {
+      lastSearch = {};
+      document.getElementById("search-title").value = "";
+      document.getElementById("search-author").value = "";
+      document.getElementById("search-genre").value = "";
+      document.getElementById("search-isbn").value = "";
+      currentPage = 0;
+      loadBooks();
+    }
+
+    function nextPage() {
+      currentPage++;
+      loadBooks();
+    }
+
+    function prevPage() {
+      if (currentPage > 0) currentPage--;
+      loadBooks();
+    }
+
+    // ➕ Přidání knihy
+    document.getElementById("add-book-form")?.addEventListener("submit", function(e) {
+      e.preventDefault();
+      const book = {
+        title: document.getElementById("title").value,
+        author: document.getElementById("author").value,
+        publicationYear: parseInt(document.getElementById("year").value),
+        isbn: document.getElementById("isbn").value,
+        genre: document.getElementById("genre").value,
+        pages: parseInt(document.getElementById("pages").value)
+      };
+      fetch("/books", {
+        method: "POST",
+        headers: {
+          "Authorization": authHeader,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(book)
+      }).then(async res => {
+        if (res.ok) {
+          alert("✅ Kniha přidána");
+          loadBooks();
+        } else if (res.status === 400) {
+          const errors = await res.json();
+          let msg = "❌ Chyby ve formuláři:\n";
+          for (const field in errors) {
+            msg += `- ${field}: ${errors[field]}\n`;
+          }
+          alert(msg);
+        } else {
+          const text = await res.text();
+          alert(`❌ Chyba při přidání knihy (${res.status}): ${text}`);
+        }
+      });
+    });
+
+    // 🗑️ Mazání knihy
+    function deleteBook(id) {
+      fetch(`/books/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": authHeader }
+      }).then(async res => {
+        if (res.ok) {
+          alert("🗑️ Kniha smazána");
+          loadBooks();
+        } else {
+          let msg;
+          try {
+            const data = await res.json();
+            msg = data.error || JSON.stringify(data);
+          } catch {
+            msg = await res.text();
+          }
+          alert(`❌ Chyba při mazání (${res.status}): ${msg}`);
+        }
+      });
+    }
+</script>
+</body>
+</html>
